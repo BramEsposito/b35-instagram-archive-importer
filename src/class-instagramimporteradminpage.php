@@ -1,0 +1,382 @@
+<?php
+/**
+ * Admin page for the Instagram Archive Importer plugin.
+ *
+ * @package Instagram_Archive_Importer
+ * @since   1.0.0
+ */
+
+/**
+ * Registers and renders the Tools > Instagram Importer admin page.
+ */
+class InstagramImporterAdminPage {
+
+	/**
+	 * WordPress option key for all plugin settings.
+	 */
+	const OPTION_KEY = 'b35_ig_importer_settings';
+
+	/**
+	 * Menu slug used for the Tools submenu page.
+	 */
+	const MENU_SLUG = 'b35-ig-importer';
+
+	/**
+	 * Absolute path to the plugin root directory (with trailing slash).
+	 *
+	 * @var string
+	 */
+	private string $plugin_dir;
+
+	/**
+	 * URL to the plugin root directory (with trailing slash).
+	 *
+	 * @var string
+	 */
+	private string $plugin_url;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param string $plugin_dir Absolute path to the plugin root directory.
+	 * @param string $plugin_url URL to the plugin root directory.
+	 */
+	public function __construct( string $plugin_dir, string $plugin_url ) {
+		$this->plugin_dir = $plugin_dir;
+		$this->plugin_url = $plugin_url;
+
+		add_action( 'admin_menu', array( $this, 'add_menu_page' ) );
+		add_action( 'admin_init', array( $this, 'register_settings' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
+		add_filter( 'upload_mimes', array( $this, 'allow_import_file_types' ) );
+	}
+
+	/**
+	 * Registers the Tools > Instagram Importer submenu page.
+	 */
+	public function add_menu_page(): void {
+		add_management_page(
+			__( 'Instagram Importer', 'b35-instagram-archive-importer' ),
+			__( 'Instagram Importer', 'b35-instagram-archive-importer' ),
+			'manage_options',
+			self::MENU_SLUG,
+			array( $this, 'render_page' )
+		);
+	}
+
+	/**
+	 * Enqueues the media library and admin page script on the plugin page only.
+	 *
+	 * @param string $hook Current admin page hook suffix.
+	 */
+	public function enqueue_scripts( string $hook ): void {
+		if ( 'tools_page_' . self::MENU_SLUG !== $hook ) {
+			return;
+		}
+		wp_enqueue_media();
+		wp_enqueue_script(
+			'b35-ig-admin-page',
+			$this->plugin_url . 'js/admin-page.js',
+			array( 'media-views' ),
+			'1.0',
+			true
+		);
+	}
+
+	/**
+	 * Extends the allowed upload MIME types to include JSON and CSV for admin users.
+	 *
+	 * @param array $mimes Existing allowed MIME types.
+	 * @return array Modified allowed MIME types.
+	 */
+	public function allow_import_file_types( array $mimes ): array {
+		if ( is_admin() ) {
+			$mimes['json'] = 'application/json';
+			$mimes['csv']  = 'text/csv';
+		}
+		return $mimes;
+	}
+
+	/**
+	 * Registers the settings group, sections, and fields via the WP Settings API.
+	 */
+	public function register_settings(): void {
+		register_setting(
+			'b35_ig_importer',
+			self::OPTION_KEY,
+			array(
+				'sanitize_callback' => array( $this, 'sanitize_settings' ),
+				'default'           => array(),
+			)
+		);
+
+		add_settings_section(
+			'b35_ig_import_settings',
+			__( 'Import Settings', 'b35-instagram-archive-importer' ),
+			'__return_false',
+			self::MENU_SLUG
+		);
+
+		add_settings_field(
+			'export_uri',
+			__( 'Media base URL', 'b35-instagram-archive-importer' ),
+			array( $this, 'render_export_uri_field' ),
+			self::MENU_SLUG,
+			'b35_ig_import_settings'
+		);
+
+		add_settings_field(
+			'category',
+			__( 'Post category', 'b35-instagram-archive-importer' ),
+			array( $this, 'render_category_field' ),
+			self::MENU_SLUG,
+			'b35_ig_import_settings'
+		);
+
+		add_settings_field(
+			'author',
+			__( 'Post author', 'b35-instagram-archive-importer' ),
+			array( $this, 'render_author_field' ),
+			self::MENU_SLUG,
+			'b35_ig_import_settings'
+		);
+
+		add_settings_field(
+			'post_status',
+			__( 'Post status', 'b35-instagram-archive-importer' ),
+			array( $this, 'render_post_status_field' ),
+			self::MENU_SLUG,
+			'b35_ig_import_settings'
+		);
+
+		add_settings_section(
+			'b35_ig_files',
+			__( 'Archive Files', 'b35-instagram-archive-importer' ),
+			'__return_false',
+			self::MENU_SLUG
+		);
+
+		add_settings_field(
+			'json_file',
+			__( 'Instagram JSON', 'b35-instagram-archive-importer' ),
+			array( $this, 'render_json_field' ),
+			self::MENU_SLUG,
+			'b35_ig_files'
+		);
+
+		add_settings_field(
+			'csv_file',
+			__( 'Locations CSV', 'b35-instagram-archive-importer' ),
+			array( $this, 'render_csv_field' ),
+			self::MENU_SLUG,
+			'b35_ig_files'
+		);
+	}
+
+	/**
+	 * Sanitizes and validates settings before saving to the database.
+	 *
+	 * @param array $input Raw input from the settings form.
+	 * @return array Sanitized settings array.
+	 */
+	public function sanitize_settings( array $input ): array {
+		$allowed_statuses = array( 'publish', 'draft' );
+		$post_status      = $input['post_status'] ?? 'publish';
+
+		return array(
+			'export_uri'         => esc_url_raw( $input['export_uri'] ?? '' ),
+			'category'           => sanitize_key( $input['category'] ?? '' ),
+			'author'             => absint( $input['author'] ?? 0 ),
+			'post_status'        => in_array( $post_status, $allowed_statuses, true ) ? $post_status : 'publish',
+			'json_attachment_id' => absint( $input['json_attachment_id'] ?? 0 ),
+			'csv_attachment_id'  => absint( $input['csv_attachment_id'] ?? 0 ),
+		);
+	}
+
+	/**
+	 * Returns saved options merged with defaults.
+	 *
+	 * @return array Plugin settings with defaults applied.
+	 */
+	private function get_options(): array {
+		return wp_parse_args(
+			get_option( self::OPTION_KEY, array() ),
+			array(
+				'export_uri'         => '',
+				'category'           => 'photography',
+				'author'             => 0,
+				'post_status'        => 'publish',
+				'json_attachment_id' => 0,
+				'csv_attachment_id'  => 0,
+			)
+		);
+	}
+
+	/**
+	 * Renders the Export URI settings field.
+	 */
+	public function render_export_uri_field(): void {
+		$opts = $this->get_options();
+		printf(
+			'<input type="url" name="%s[export_uri]" value="%s" class="regular-text" placeholder="https://example.com/wp-content/uploads/instagram/">',
+			esc_attr( self::OPTION_KEY ),
+			esc_attr( $opts['export_uri'] )
+		);
+		echo '<p class="description">' . esc_html__( 'Base URL where the Instagram media files are hosted.', 'b35-instagram-archive-importer' ) . '</p>';
+	}
+
+	/**
+	 * Renders the post category dropdown settings field.
+	 */
+	public function render_category_field(): void {
+		$opts       = $this->get_options();
+		$categories = get_categories(
+			array(
+				'hide_empty' => false,
+				'orderby'    => 'name',
+			)
+		);
+		echo '<select name="' . esc_attr( self::OPTION_KEY . '[category]' ) . '">';
+		echo '<option value="">' . esc_html__( '— Select category —', 'b35-instagram-archive-importer' ) . '</option>';
+		foreach ( $categories as $cat ) {
+			printf(
+				'<option value="%s"%s>%s</option>',
+				esc_attr( $cat->slug ),
+				selected( $opts['category'], $cat->slug, false ),
+				esc_html( $cat->name )
+			);
+		}
+		echo '</select>';
+	}
+
+	/**
+	 * Renders the post author dropdown settings field.
+	 */
+	public function render_author_field(): void {
+		$opts  = $this->get_options();
+		$users = get_users(
+			array(
+				'capability' => 'publish_posts',
+				'orderby'    => 'display_name',
+			)
+		);
+		echo '<select name="' . esc_attr( self::OPTION_KEY . '[author]' ) . '">';
+		echo '<option value="0">' . esc_html__( '— Select author —', 'b35-instagram-archive-importer' ) . '</option>';
+		foreach ( $users as $user ) {
+			printf(
+				'<option value="%d"%s>%s</option>',
+				(int) $user->ID,
+				selected( $opts['author'], $user->ID, false ),
+				esc_html( $user->display_name )
+			);
+		}
+		echo '</select>';
+	}
+
+	/**
+	 * Renders the post status select field.
+	 */
+	public function render_post_status_field(): void {
+		$opts     = $this->get_options();
+		$statuses = array(
+			'publish' => __( 'Published', 'b35-instagram-archive-importer' ),
+			'draft'   => __( 'Draft', 'b35-instagram-archive-importer' ),
+		);
+		echo '<select name="' . esc_attr( self::OPTION_KEY . '[post_status]' ) . '">';
+		foreach ( $statuses as $value => $label ) {
+			printf(
+				'<option value="%s"%s>%s</option>',
+				esc_attr( $value ),
+				selected( $opts['post_status'], $value, false ),
+				esc_html( $label )
+			);
+		}
+		echo '</select>';
+	}
+
+	/**
+	 * Renders the Instagram JSON file picker field.
+	 */
+	public function render_json_field(): void {
+		$opts          = $this->get_options();
+		$attachment_id = (int) $opts['json_attachment_id'];
+		$filename      = $attachment_id ? basename( (string) get_attached_file( $attachment_id ) ) : '';
+		?>
+		<input type="hidden" id="b35-ig-json-id"
+			name="<?php echo esc_attr( self::OPTION_KEY ); ?>[json_attachment_id]"
+			value="<?php echo esc_attr( $attachment_id ); ?>">
+		<button type="button" id="b35-ig-select-json" class="button"
+			data-title="<?php esc_attr_e( 'Select Instagram JSON file', 'b35-instagram-archive-importer' ); ?>">
+			<?php esc_html_e( 'Select file', 'b35-instagram-archive-importer' ); ?>
+		</button>
+		<span id="b35-ig-json-name" style="margin-left:8px"><?php echo esc_html( $filename ); ?></span>
+		<p class="description"><?php esc_html_e( 'The posts_1.json file from your Instagram data export.', 'b35-instagram-archive-importer' ); ?></p>
+		<?php
+	}
+
+	/**
+	 * Renders the locations CSV file picker field.
+	 */
+	public function render_csv_field(): void {
+		$opts          = $this->get_options();
+		$attachment_id = (int) $opts['csv_attachment_id'];
+		$filename      = $attachment_id ? basename( (string) get_attached_file( $attachment_id ) ) : '';
+		?>
+		<input type="hidden" id="b35-ig-csv-id"
+			name="<?php echo esc_attr( self::OPTION_KEY ); ?>[csv_attachment_id]"
+			value="<?php echo esc_attr( $attachment_id ); ?>">
+		<button type="button" id="b35-ig-select-csv" class="button"
+			data-title="<?php esc_attr_e( 'Select locations CSV file', 'b35-instagram-archive-importer' ); ?>">
+			<?php esc_html_e( 'Select file', 'b35-instagram-archive-importer' ); ?>
+		</button>
+		<span id="b35-ig-csv-name" style="margin-left:8px"><?php echo esc_html( $filename ); ?></span>
+		<p class="description"><?php esc_html_e( 'CSV with columns: timestamp, location name, latitude, longitude.', 'b35-instagram-archive-importer' ); ?></p>
+		<?php
+	}
+
+	/**
+	 * Renders the full admin page: settings form and import trigger.
+	 */
+	public function render_page(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		$opts       = $this->get_options();
+		$json_ready = $opts['json_attachment_id'] && get_attached_file( (int) $opts['json_attachment_id'] );
+		$csv_ready  = $opts['csv_attachment_id'] && get_attached_file( (int) $opts['csv_attachment_id'] );
+		$import_url = wp_nonce_url(
+			admin_url( '?action=b35-instagram-archive-importer-import' ),
+			'b35-instagram-archive-importer-import'
+		);
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'Instagram Archive Importer', 'b35-instagram-archive-importer' ); ?></h1>
+
+			<form method="post" action="options.php">
+				<?php
+				settings_fields( 'b35_ig_importer' );
+				do_settings_sections( self::MENU_SLUG );
+				submit_button( __( 'Save Settings', 'b35-instagram-archive-importer' ) );
+				?>
+			</form>
+
+			<hr>
+
+			<h2><?php esc_html_e( 'Run Import', 'b35-instagram-archive-importer' ); ?></h2>
+
+			<?php if ( ! $json_ready || ! $csv_ready ) : ?>
+				<p class="description">
+					<?php esc_html_e( 'Select both archive files above and save settings before importing.', 'b35-instagram-archive-importer' ); ?>
+				</p>
+				<button class="button button-primary" disabled><?php esc_html_e( 'Start Import', 'b35-instagram-archive-importer' ); ?></button>
+			<?php else : ?>
+				<p><?php esc_html_e( 'Files are ready. Click to start the import — this may take a while.', 'b35-instagram-archive-importer' ); ?></p>
+				<a href="<?php echo esc_url( $import_url ); ?>" class="button button-primary">
+					<?php esc_html_e( 'Start Import', 'b35-instagram-archive-importer' ); ?>
+				</a>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+}

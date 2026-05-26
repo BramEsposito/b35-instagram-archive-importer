@@ -14,8 +14,10 @@
  * @package Instagram_Archive_Importer
  */
 
+require_once plugin_dir_path( __FILE__ ) . 'src/class-instagramimporteradminpage.php';
 require_once plugin_dir_path( __FILE__ ) . 'src/class-instagramarchiveimporter.php';
 require_once plugin_dir_path( __FILE__ ) . 'src/class-locationmetabox.php';
 
+new InstagramImporterAdminPage( plugin_dir_path( __FILE__ ), plugin_dir_url( __FILE__ ) );
 new InstagramArchiveImporter( plugin_dir_path( __FILE__ ) );
 new LocationMetaBox( plugin_dir_url( __FILE__ ) );

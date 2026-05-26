@@ -75,6 +75,13 @@ class InstagramArchiveImporter {
 	private int $user_id;
 
 	/**
+	 * Post status for imported posts ('publish' or 'draft').
+	 *
+	 * @var string
+	 */
+	private string $post_status;
+
+	/**
 	 * Parsed location data rows from locations.csv.
 	 *
 	 * @var array
@@ -100,15 +107,34 @@ class InstagramArchiveImporter {
 	}
 
 	/**
-	 * Initialises plugin settings from WordPress upload paths.
+	 * Loads plugin settings from the database, falling back to safe defaults.
 	 */
 	public function settings() {
-		$upload_data = wp_upload_dir();
-		$upload_dir  = $upload_data['basedir'];
+		$opts = wp_parse_args(
+			get_option( InstagramImporterAdminPage::OPTION_KEY, array() ),
+			array(
+				'export_uri'         => 'https://bramesposito.com/wp-content/uploads/instagram/',
+				'category'           => 'photography',
+				'author'             => 0,
+				'post_status'        => 'publish',
+				'json_attachment_id' => 0,
+				'csv_attachment_id'  => 0,
+			)
+		);
 
-		// TODO: set via WP Admin UI.
-		$this->user_id              = get_current_user_id();
-		$this->category_name        = 'photography';
+		$this->user_id       = $opts['author'] ? (int) $opts['author'] : get_current_user_id();
+		$this->category_name = $opts['category'] ? $opts['category'] : 'photography';
+		$this->post_status   = $opts['post_status'];
+		$this->export_uri    = $opts['export_uri'];
+
+		$upload_dir = wp_upload_dir()['basedir'];
+
+		$json_path       = $opts['json_attachment_id'] ? get_attached_file( (int) $opts['json_attachment_id'] ) : null;
+		$this->json_file = $json_path ? $json_path : $upload_dir . '/posts_1.json';
+
+		$csv_path            = $opts['csv_attachment_id'] ? get_attached_file( (int) $opts['csv_attachment_id'] ) : null;
+		$this->locations_csv = $csv_path ? $csv_path : $upload_dir . '/locations.csv';
+
 		$this->ig_tag_taxonomy      = array(
 			'name'     => 'ig_tag',
 			'singular' => 'photo tag',
@@ -119,11 +145,6 @@ class InstagramArchiveImporter {
 			'singular' => 'location',
 			'plural'   => 'locations',
 		);
-		// TODO: set via WP Admin UI.
-		$this->export_uri = 'https://bramesposito.com/wp-content/uploads/instagram/';
-		// TODO: upload from WP Admin UI and store in upload_dir wp_upload_dir().
-		$this->json_file     = $upload_dir . '/posts_1.json';
-		$this->locations_csv = $upload_dir . '/locations.csv';
 	}
 
 	/**
@@ -459,7 +480,7 @@ POST;
 		$wordpress_post = array(
 			'post_title'   => $post['post_title'],
 			'post_content' => $post['post_content'],
-			'post_status'  => 'publish',
+			'post_status'  => $this->post_status,
 			'post_author'  => $this->user_id,
 			'post_type'    => 'post',
 			'post_date'    => $post['post_time'],
