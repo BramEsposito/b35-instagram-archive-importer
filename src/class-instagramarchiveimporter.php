@@ -82,6 +82,13 @@ class InstagramArchiveImporter {
 	private array $location_data = array();
 
 	/**
+	 * Error messages collected during an import run.
+	 *
+	 * @var string[]
+	 */
+	private array $errors = array();
+
+	/**
 	 * Constructor.
 	 *
 	 * @param string $plugin_root Absolute path to the plugin root directory.
@@ -359,12 +366,16 @@ class InstagramArchiveImporter {
 	}
 
 	/**
-	 * Placeholder for error collection — not yet implemented.
+	 * Collects an error message for display after the import completes.
 	 *
-	 * @param mixed $error Error object or message string.
+	 * @param \WP_Error|string $error WP_Error object or plain error message string.
 	 */
 	private function add_error( $error ) {
-		// TODO: implement.
+		if ( is_wp_error( $error ) ) {
+			$this->errors[] = $error->get_error_message();
+		} else {
+			$this->errors[] = (string) $error;
+		}
 	}
 
 	/**
@@ -520,15 +531,29 @@ POST;
 	}
 
 	/**
-	 * Displays an admin success notice after the import completes.
+	 * Displays import results as admin notices: success count and any errors.
 	 */
 	public function display_notice() {
 		wp_admin_notice(
-			__( 'Importing instagram posts', 'b35-instagram-archive-importer' ),
-			array(
-				'type' => 'success',
-			)
+			__( 'Instagram import complete.', 'b35-instagram-archive-importer' ),
+			array( 'type' => 'success' )
 		);
+
+		if ( ! empty( $this->errors ) ) {
+			$items   = implode( '', array_map( fn( $e ) => '<li>' . esc_html( $e ) . '</li>', $this->errors ) );
+			$message = sprintf(
+				// translators: %d: number of errors.
+				_n( '%d error occurred during import:', '%d errors occurred during import:', count( $this->errors ), 'b35-instagram-archive-importer' ),
+				count( $this->errors )
+			) . '<ul>' . $items . '</ul>';
+			wp_admin_notice(
+				$message,
+				array(
+					'type'           => 'error',
+					'paragraph_wrap' => false,
+				)
+			);
+		}
 	}
 
 	/**
