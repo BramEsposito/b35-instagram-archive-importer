@@ -3,9 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "lint:js": "eslint js/"
+    "lint:js": "eslint js/",
+    "lint:php": "phpcs --standard=WordPress",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.js": "eslint",
+    "*.php": "phpcs --standard=WordPress"
   },
   "devDependencies": {
-    "@wordpress/eslint-plugin": "^22.0.0"
+    "@wordpress/eslint-plugin": "^22.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0"
   }
 }
