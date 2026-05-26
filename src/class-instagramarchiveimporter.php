@@ -176,16 +176,16 @@ class InstagramArchiveImporter {
 	/**
 	 * Handles the import action triggered via the admin URL query parameter.
 	 *
-	 * Trigger URL: wp_nonce_url( admin_url( '?action=instagram-archive-importer-import' ), 'instagram-archive-importer-import' )
+	 * Trigger URL: wp_nonce_url( admin_url( '?action=b35-instagram-archive-importer-import' ), 'b35-instagram-archive-importer-import' )
 	 */
 	public function admin_init() {
-		if ( ! isset( $_GET['action'] ) || 'instagram-archive-importer-import' !== sanitize_key( wp_unslash( $_GET['action'] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_GET['action'] ) || 'b35-instagram-archive-importer-import' !== sanitize_key( wp_unslash( $_GET['action'] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return;
 		}
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		check_admin_referer( 'instagram-archive-importer-import' );
+		check_admin_referer( 'b35-instagram-archive-importer-import' );
 		$this->init_import();
 		add_action( 'admin_notices', array( $this, 'display_notice' ) );
 	}
@@ -524,7 +524,7 @@ POST;
 	 */
 	public function display_notice() {
 		wp_admin_notice(
-			__( 'Importing instagram posts', 'instagram-archive-importer' ),
+			__( 'Importing instagram posts', 'b35-instagram-archive-importer' ),
 			array(
 				'type' => 'success',
 			)
@@ -583,7 +583,7 @@ POST;
 			$this->add_error(
 				sprintf(
 					// translators: 1: Location timestamp, 2: WordPress post ID.
-					__( 'Location %1$s not found for post id %2$s', 'instagram-archive-importer' ),
+					__( 'Location %1$s not found for post id %2$s', 'b35-instagram-archive-importer' ),
 					$time,
 					$this->post_id
 				)

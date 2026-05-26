@@ -8,7 +8,7 @@
  * Author: Bram Esposito
  * Author URI: https://bramesposito.com
  * Version: 1.00
- * Text Domain: instagram-archive-importer
+ * Text Domain: b35-instagram-archive-importer
  * License: MIT License
  *
  * @package Instagram_Archive_Importer

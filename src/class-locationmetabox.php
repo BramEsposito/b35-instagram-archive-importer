@@ -71,7 +71,7 @@ class LocationMetaBox {
 		}
 
 		wp_enqueue_script(
-			'ig-location-meta-box',
+			'b35-ig-location-meta-box',
 			$this->plugin_url . 'js/location-meta-box.js',
 			array(),
 			'1.0',
@@ -89,7 +89,7 @@ class LocationMetaBox {
 				),
 				'https://maps.googleapis.com/maps/api/js'
 			),
-			array( 'ig-location-meta-box' ),
+			array( 'b35-ig-location-meta-box' ),
 			false, // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NoExplicitVersion -- external CDN, no version applies
 			true
 		);
