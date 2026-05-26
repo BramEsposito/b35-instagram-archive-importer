@@ -135,13 +135,16 @@ class InstagramArchiveImporter {
 		$csv_path            = $opts['csv_attachment_id'] ? get_attached_file( (int) $opts['csv_attachment_id'] ) : null;
 		$this->locations_csv = $csv_path ? $csv_path : $upload_dir . '/locations.csv';
 
+		$tag_tax = $opts['tag_taxonomy'];
+		$loc_tax = $opts['location_taxonomy'];
+
 		$this->ig_tag_taxonomy      = array(
-			'name'     => 'ig_tag',
+			'name'     => $tag_tax ? $tag_tax : 'ig_tag',
 			'singular' => 'photo tag',
 			'plural'   => 'photo tags',
 		);
 		$this->ig_location_taxonomy = array(
-			'name'     => 'ig_location',
+			'name'     => $loc_tax ? $loc_tax : 'ig_location',
 			'singular' => 'location',
 			'plural'   => 'locations',
 		);
@@ -165,7 +168,7 @@ class InstagramArchiveImporter {
 	 * Removes the default ig_location taxonomy meta box from the post editor.
 	 */
 	public function add_meta_box() {
-		remove_meta_box( 'tagsdiv-ig_location', 'post', 'side' );
+		remove_meta_box( 'tagsdiv-' . $this->ig_location_taxonomy['name'], 'post', 'side' );
 	}
 
 	/**

@@ -149,6 +149,22 @@ class InstagramImporterAdminPage {
 			'b35_ig_import_settings'
 		);
 
+		add_settings_field(
+			'tag_taxonomy',
+			__( 'Hashtag taxonomy', 'b35-instagram-archive-importer' ),
+			array( $this, 'render_tag_taxonomy_field' ),
+			self::MENU_SLUG,
+			'b35_ig_import_settings'
+		);
+
+		add_settings_field(
+			'location_taxonomy',
+			__( 'Location taxonomy', 'b35-instagram-archive-importer' ),
+			array( $this, 'render_location_taxonomy_field' ),
+			self::MENU_SLUG,
+			'b35_ig_import_settings'
+		);
+
 		add_settings_section(
 			'b35_ig_files',
 			__( 'Archive Files', 'b35-instagram-archive-importer' ),
@@ -180,14 +196,18 @@ class InstagramImporterAdminPage {
 	 * @return array Sanitized settings array.
 	 */
 	public function sanitize_settings( array $input ): array {
-		$allowed_statuses = array( 'publish', 'draft' );
-		$post_status      = $input['post_status'] ?? 'publish';
+		$allowed_statuses  = array( 'publish', 'draft' );
+		$post_status       = $input['post_status'] ?? 'publish';
+		$tag_taxonomy      = sanitize_key( $input['tag_taxonomy'] ?? 'ig_tag' );
+		$location_taxonomy = sanitize_key( $input['location_taxonomy'] ?? 'ig_location' );
 
 		return array(
 			'export_uri'         => esc_url_raw( $input['export_uri'] ?? '' ),
 			'category'           => sanitize_key( $input['category'] ?? '' ),
 			'author'             => absint( $input['author'] ?? 0 ),
 			'post_status'        => in_array( $post_status, $allowed_statuses, true ) ? $post_status : 'publish',
+			'tag_taxonomy'       => $tag_taxonomy ? $tag_taxonomy : 'ig_tag',
+			'location_taxonomy'  => $location_taxonomy ? $location_taxonomy : 'ig_location',
 			'json_attachment_id' => absint( $input['json_attachment_id'] ?? 0 ),
 			'csv_attachment_id'  => absint( $input['csv_attachment_id'] ?? 0 ),
 		);
@@ -206,6 +226,8 @@ class InstagramImporterAdminPage {
 				'category'           => 'photography',
 				'author'             => 0,
 				'post_status'        => 'publish',
+				'tag_taxonomy'       => 'ig_tag',
+				'location_taxonomy'  => 'ig_location',
 				'json_attachment_id' => 0,
 				'csv_attachment_id'  => 0,
 			)
@@ -289,6 +311,53 @@ class InstagramImporterAdminPage {
 				esc_attr( $value ),
 				selected( $opts['post_status'], $value, false ),
 				esc_html( $label )
+			);
+		}
+		echo '</select>';
+	}
+
+	/**
+	 * Renders the hashtag taxonomy select field.
+	 */
+	public function render_tag_taxonomy_field(): void {
+		$opts = $this->get_options();
+		$this->render_taxonomy_select( self::OPTION_KEY . '[tag_taxonomy]', $opts['tag_taxonomy'] );
+		echo '<p class="description">' . esc_html__( 'Taxonomy used for hashtags extracted from captions. Defaults to ig_tag (created automatically).', 'b35-instagram-archive-importer' ) . '</p>';
+	}
+
+	/**
+	 * Renders the location taxonomy select field.
+	 */
+	public function render_location_taxonomy_field(): void {
+		$opts = $this->get_options();
+		$this->render_taxonomy_select( self::OPTION_KEY . '[location_taxonomy]', $opts['location_taxonomy'] );
+		echo '<p class="description">' . esc_html__( 'Taxonomy used for locations. Defaults to ig_location (created automatically).', 'b35-instagram-archive-importer' ) . '</p>';
+	}
+
+	/**
+	 * Renders a select element listing all taxonomies registered for posts.
+	 *
+	 * @param string $name    The name attribute for the select element.
+	 * @param string $current The currently selected taxonomy slug.
+	 */
+	private function render_taxonomy_select( string $name, string $current ): void {
+		$taxonomies = get_object_taxonomies( 'post', 'objects' );
+		echo '<select name="' . esc_attr( $name ) . '">';
+		foreach ( $taxonomies as $taxonomy ) {
+			printf(
+				'<option value="%s"%s>%s (%s)</option>',
+				esc_attr( $taxonomy->name ),
+				selected( $current, $taxonomy->name, false ),
+				esc_html( $taxonomy->label ),
+				esc_html( $taxonomy->name )
+			);
+		}
+		// Show the current value even if its taxonomy is not yet registered.
+		if ( ! isset( $taxonomies[ $current ] ) ) {
+			printf(
+				'<option value="%s" selected="selected">%s</option>',
+				esc_attr( $current ),
+				esc_html( $current )
 			);
 		}
 		echo '</select>';

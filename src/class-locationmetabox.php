@@ -32,11 +32,23 @@ class LocationMetaBox {
 	}
 
 	/**
+	 * Returns the location taxonomy slug configured in plugin settings.
+	 *
+	 * @return string Taxonomy slug.
+	 */
+	private function get_location_taxonomy(): string {
+		$opts     = get_option( InstagramImporterAdminPage::OPTION_KEY, array() );
+		$taxonomy = sanitize_key( $opts['location_taxonomy'] ?? 'ig_location' );
+		return $taxonomy ? $taxonomy : 'ig_location';
+	}
+
+	/**
 	 * Registers the location meta box and removes the default taxonomy meta box.
 	 */
 	public function add_meta_box(): void {
+		$taxonomy = $this->get_location_taxonomy();
 		add_meta_box( 'ig_location', 'Location', array( $this, 'render' ), 'post', 'side' );
-		remove_meta_box( 'tagsdiv-ig_location', 'post', 'side' );
+		remove_meta_box( 'tagsdiv-' . $taxonomy, 'post', 'side' );
 	}
 
 	/**
@@ -51,7 +63,10 @@ class LocationMetaBox {
 		}
 		wp_add_inline_script(
 			'wp-edit-post',
-			"wp.domReady(function(){ wp.data.dispatch('core/editor').removeEditorPanel('taxonomy-panel-ig_location'); });"
+			sprintf(
+				"wp.domReady(function(){ wp.data.dispatch('core/editor').removeEditorPanel('taxonomy-panel-%s'); });",
+				esc_js( $this->get_location_taxonomy() )
+			)
 		);
 	}
 
@@ -103,7 +118,7 @@ class LocationMetaBox {
 	public function render( \WP_Post $post ): void {
 		wp_nonce_field( 'ig_location', 'ig_location_nonce' );
 
-		$terms    = wp_get_object_terms( $post->ID, 'ig_location' );
+		$terms    = wp_get_object_terms( $post->ID, $this->get_location_taxonomy() );
 		$name     = '';
 		$lat      = '';
 		$lon      = '';
@@ -170,20 +185,22 @@ class LocationMetaBox {
 		$place_id = sanitize_text_field( wp_unslash( $_POST['ig_location_place_id'] ?? '' ) );
 		$changed  = ( '1' === sanitize_text_field( wp_unslash( $_POST['ig_location_changed'] ?? '0' ) ) );
 
+		$taxonomy = $this->get_location_taxonomy();
+
 		// Empty name means clear the location.
 		if ( empty( $name ) ) {
-			wp_set_object_terms( $post_id, array(), 'ig_location' );
+			wp_set_object_terms( $post_id, array(), $taxonomy );
 
 			return;
 		}
 
 		// No new place selected — update the display name on the existing term only.
 		if ( ! $changed ) {
-			$existing = wp_get_object_terms( $post_id, 'ig_location' );
+			$existing = wp_get_object_terms( $post_id, $taxonomy );
 			if ( ! empty( $existing ) && ! is_wp_error( $existing ) ) {
 				$term = $existing[0];
 				if ( $term->name !== $name ) {
-					wp_update_term( $term->term_id, 'ig_location', array( 'name' => $name ) );
+					wp_update_term( $term->term_id, $taxonomy, array( 'name' => $name ) );
 				}
 			}
 
@@ -196,7 +213,7 @@ class LocationMetaBox {
 		if ( $place_id ) {
 			$found = get_terms(
 				array(
-					'taxonomy'   => 'ig_location',
+					'taxonomy'   => $taxonomy,
 					'hide_empty' => false,
 					'meta_query' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 						array(
@@ -209,14 +226,14 @@ class LocationMetaBox {
 			);
 			if ( ! empty( $found ) && ! is_wp_error( $found ) ) {
 				$term_id = $found[0]->term_id;
-				wp_update_term( $term_id, 'ig_location', array( 'name' => $name ) );
+				wp_update_term( $term_id, $taxonomy, array( 'name' => $name ) );
 			}
 		}
 
 		if ( ! $term_id ) {
-			$result = wp_insert_term( $name, 'ig_location' );
+			$result = wp_insert_term( $name, $taxonomy );
 			if ( is_wp_error( $result ) ) {
-				$existing_term = get_term_by( 'name', $name, 'ig_location' );
+				$existing_term = get_term_by( 'name', $name, $taxonomy );
 				if ( ! $existing_term ) {
 					return;
 				}
@@ -239,6 +256,6 @@ class LocationMetaBox {
 			update_term_meta( $term_id, 'latlong', "$lat,$lon" );
 		}
 
-		wp_set_object_terms( $post_id, $term_id, 'ig_location', false );
+		wp_set_object_terms( $post_id, $term_id, $taxonomy, false );
 	}
 }
