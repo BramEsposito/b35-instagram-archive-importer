@@ -13,6 +13,10 @@ class Test_Instagram_Archive_Importer extends WP_UnitTestCase {
 		$this->importer->init();
 		// Ensure the default category exists so add_post() can assign it.
 		wp_insert_term( 'Photography', 'category', array( 'slug' => 'photography' ) );
+		// ig_location is registered by b35-photoblog in production; register it here for tests.
+		if ( ! taxonomy_exists( 'ig_location' ) ) {
+			register_taxonomy( 'ig_location', array( 'post' ) );
+		}
 	}
 
 	// -------------------------------------------------------------------------

@@ -158,9 +158,9 @@ class InstagramImporterAdminPage {
 		);
 
 		add_settings_field(
-			'location_taxonomy',
-			__( 'Location taxonomy', 'b35-instagram-archive-importer' ),
-			array( $this, 'render_location_taxonomy_field' ),
+			'sslverify',
+			__( 'SSL verification', 'b35-instagram-archive-importer' ),
+			array( $this, 'render_sslverify_field' ),
 			self::MENU_SLUG,
 			'b35_ig_import_settings'
 		);
@@ -196,10 +196,9 @@ class InstagramImporterAdminPage {
 	 * @return array Sanitized settings array.
 	 */
 	public function sanitize_settings( array $input ): array {
-		$allowed_statuses  = array( 'publish', 'draft' );
-		$post_status       = $input['post_status'] ?? 'publish';
-		$tag_taxonomy      = sanitize_key( $input['tag_taxonomy'] ?? 'ig_tag' );
-		$location_taxonomy = sanitize_key( $input['location_taxonomy'] ?? 'ig_location' );
+		$allowed_statuses = array( 'publish', 'draft' );
+		$post_status      = $input['post_status'] ?? 'publish';
+		$tag_taxonomy     = sanitize_key( $input['tag_taxonomy'] ?? 'ig_tag' );
 
 		return array(
 			'export_uri'         => esc_url_raw( $input['export_uri'] ?? '' ),
@@ -207,7 +206,7 @@ class InstagramImporterAdminPage {
 			'author'             => absint( $input['author'] ?? 0 ),
 			'post_status'        => in_array( $post_status, $allowed_statuses, true ) ? $post_status : 'publish',
 			'tag_taxonomy'       => $tag_taxonomy ? $tag_taxonomy : 'ig_tag',
-			'location_taxonomy'  => $location_taxonomy ? $location_taxonomy : 'ig_location',
+			'sslverify'          => ! empty( $input['sslverify'] ),
 			'json_attachment_id' => absint( $input['json_attachment_id'] ?? 0 ),
 			'csv_attachment_id'  => absint( $input['csv_attachment_id'] ?? 0 ),
 		);
@@ -227,7 +226,7 @@ class InstagramImporterAdminPage {
 				'author'             => 0,
 				'post_status'        => 'publish',
 				'tag_taxonomy'       => 'ig_tag',
-				'location_taxonomy'  => 'ig_location',
+				'sslverify'          => true,
 				'json_attachment_id' => 0,
 				'csv_attachment_id'  => 0,
 			)
@@ -326,15 +325,6 @@ class InstagramImporterAdminPage {
 	}
 
 	/**
-	 * Renders the location taxonomy select field.
-	 */
-	public function render_location_taxonomy_field(): void {
-		$opts = $this->get_options();
-		$this->render_taxonomy_select( self::OPTION_KEY . '[location_taxonomy]', $opts['location_taxonomy'] );
-		echo '<p class="description">' . esc_html__( 'Taxonomy used for locations. Defaults to ig_location (created automatically).', 'b35-instagram-archive-importer' ) . '</p>';
-	}
-
-	/**
 	 * Renders a select element listing all taxonomies registered for posts.
 	 *
 	 * @param string $name    The name attribute for the select element.
@@ -361,6 +351,20 @@ class InstagramImporterAdminPage {
 			);
 		}
 		echo '</select>';
+	}
+
+	/**
+	 * Renders the SSL verification checkbox field.
+	 */
+	public function render_sslverify_field(): void {
+		$opts = $this->get_options();
+		printf(
+			'<label><input type="checkbox" name="%s[sslverify]" value="1"%s> %s</label>',
+			esc_attr( self::OPTION_KEY ),
+			checked( $opts['sslverify'], true, false ),
+			esc_html__( 'Verify SSL certificates', 'b35-instagram-archive-importer' )
+		);
+		echo '<p class="description">' . esc_html__( 'Uncheck when fetching media from a local or staging server with a self-signed certificate (e.g. ddev).', 'b35-instagram-archive-importer' ) . '</p>';
 	}
 
 	/**
@@ -404,6 +408,99 @@ class InstagramImporterAdminPage {
 	}
 
 	/**
+	 * Renders the test import report stored by the importer after a test run.
+	 *
+	 * @param array|false|null $report Report data from the transient, or null/false if absent.
+	 */
+	private function render_test_report( $report ): void {
+		if ( ! is_array( $report ) ) {
+			return;
+		}
+
+		if ( isset( $report['skipped'] ) ) {
+			?>
+			<div class="notice notice-info inline">
+				<p><?php esc_html_e( 'This post has already been imported and was skipped.', 'b35-instagram-archive-importer' ); ?></p>
+			</div>
+			<?php
+			return;
+		}
+
+		if ( isset( $report['fatal'] ) ) {
+			?>
+			<div class="notice notice-error inline">
+				<p><strong><?php esc_html_e( 'Test import failed:', 'b35-instagram-archive-importer' ); ?></strong>
+				<?php echo esc_html( $report['fatal'] ); ?></p>
+			</div>
+			<?php
+			return;
+		}
+
+		$has_errors  = ! empty( $report['errors'] );
+		$notice_type = $has_errors ? 'notice-warning' : 'notice-success';
+		?>
+		<div class="notice <?php echo esc_attr( $notice_type ); ?> inline" style="padding-bottom:1em">
+			<h3 style="margin-top:.5em"><?php esc_html_e( 'Test Import Report', 'b35-instagram-archive-importer' ); ?></h3>
+			<table class="form-table" role="presentation" style="margin:0">
+				<tr>
+					<th><?php esc_html_e( 'Post', 'b35-instagram-archive-importer' ); ?></th>
+					<td>
+						<a href="<?php echo esc_url( $report['edit_url'] ); ?>"><?php echo esc_html( $report['post_title'] ); ?></a>
+						<span class="description">(ID: <?php echo (int) $report['post_id']; ?>)</span>
+						&mdash; <a href="<?php echo esc_url( $report['view_url'] ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'View', 'b35-instagram-archive-importer' ); ?></a>
+						&mdash; <?php echo esc_html( $report['post_date'] ); ?>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Media', 'b35-instagram-archive-importer' ); ?></th>
+					<td>
+						<?php if ( empty( $report['media'] ) ) : ?>
+							<em><?php esc_html_e( 'None', 'b35-instagram-archive-importer' ); ?></em>
+						<?php else : ?>
+							<?php foreach ( $report['media'] as $item ) : ?>
+								<?php echo esc_html( $item['filename'] ); ?>
+								<span class="description">(<?php echo esc_html( $item['type'] ); ?>, ID: <?php echo (int) $item['id']; ?>)</span><br>
+								<?php if ( $item['source_url'] ) : ?>
+									<span class="description"><?php echo esc_html( $item['source_url'] ); ?></span><br>
+								<?php endif; ?>
+							<?php endforeach; ?>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Tags', 'b35-instagram-archive-importer' ); ?></th>
+					<td>
+						<?php if ( empty( $report['tags'] ) ) : ?>
+							<em><?php esc_html_e( 'None', 'b35-instagram-archive-importer' ); ?></em>
+						<?php else : ?>
+							<?php echo esc_html( implode( ', ', $report['tags'] ) ); ?>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Location', 'b35-instagram-archive-importer' ); ?></th>
+					<td>
+						<?php if ( $report['location'] ) : ?>
+							<?php echo esc_html( $report['location'] ); ?>
+						<?php else : ?>
+							<em><?php esc_html_e( 'None', 'b35-instagram-archive-importer' ); ?></em>
+						<?php endif; ?>
+					</td>
+				</tr>
+			</table>
+			<?php if ( $has_errors ) : ?>
+				<p><strong><?php esc_html_e( 'Errors:', 'b35-instagram-archive-importer' ); ?></strong></p>
+				<ul style="margin:.5em 0 0 1.5em;list-style:disc">
+					<?php foreach ( $report['errors'] as $error ) : ?>
+						<li><?php echo esc_html( $error ); ?></li>
+					<?php endforeach; ?>
+				</ul>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	/**
 	 * Renders the full admin page: settings form and import trigger.
 	 */
 	public function render_page(): void {
@@ -418,6 +515,17 @@ class InstagramImporterAdminPage {
 			admin_url( '?action=b35-instagram-archive-importer-import' ),
 			'b35-instagram-archive-importer-import'
 		);
+		$test_url   = wp_nonce_url(
+			admin_url( '?action=b35-instagram-archive-importer-test' ),
+			'b35-instagram-archive-importer-test'
+		);
+
+		$test_report = null;
+		if ( isset( $_GET['b35_test_done'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$transient_key = 'b35_ig_test_import_' . get_current_user_id();
+			$test_report   = get_transient( $transient_key );
+			delete_transient( $transient_key );
+		}
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Instagram Archive Importer', 'b35-instagram-archive-importer' ); ?></h1>
@@ -429,6 +537,22 @@ class InstagramImporterAdminPage {
 				submit_button( __( 'Save Settings', 'b35-instagram-archive-importer' ) );
 				?>
 			</form>
+
+			<hr>
+
+			<h2><?php esc_html_e( 'Test Import', 'b35-instagram-archive-importer' ); ?></h2>
+
+			<?php $this->render_test_report( $test_report ); ?>
+
+			<?php if ( $json_ready ) : ?>
+				<p><?php esc_html_e( 'Imports the first post from the JSON file so you can verify your settings before running the full import. A real post will be created.', 'b35-instagram-archive-importer' ); ?></p>
+				<a href="<?php echo esc_url( $test_url ); ?>" class="button">
+					<?php esc_html_e( 'Test Import', 'b35-instagram-archive-importer' ); ?>
+				</a>
+			<?php else : ?>
+				<p class="description"><?php esc_html_e( 'Select a JSON file above and save settings to enable the test import.', 'b35-instagram-archive-importer' ); ?></p>
+				<button class="button" disabled><?php esc_html_e( 'Test Import', 'b35-instagram-archive-importer' ); ?></button>
+			<?php endif; ?>
 
 			<hr>
 

@@ -82,6 +82,13 @@ class InstagramArchiveImporter {
 	private string $post_status;
 
 	/**
+	 * Whether to verify SSL certificates when downloading media files.
+	 *
+	 * @var bool
+	 */
+	private bool $sslverify;
+
+	/**
 	 * Parsed location data rows from locations.csv.
 	 *
 	 * @var array
@@ -94,6 +101,13 @@ class InstagramArchiveImporter {
 	 * @var string[]
 	 */
 	private array $errors = array();
+
+	/**
+	 * Number of posts skipped because they were already imported.
+	 *
+	 * @var int
+	 */
+	private int $skipped = 0;
 
 	/**
 	 * Constructor.
@@ -119,6 +133,7 @@ class InstagramArchiveImporter {
 				'post_status'        => 'publish',
 				'tag_taxonomy'       => 'ig_tag',
 				'location_taxonomy'  => 'ig_location',
+				'sslverify'          => true,
 				'json_attachment_id' => 0,
 				'csv_attachment_id'  => 0,
 			)
@@ -128,6 +143,7 @@ class InstagramArchiveImporter {
 		$this->category_name = $opts['category'] ? $opts['category'] : 'photography';
 		$this->post_status   = $opts['post_status'];
 		$this->export_uri    = $opts['export_uri'];
+		$this->sslverify     = (bool) $opts['sslverify'];
 
 		$upload_dir = wp_upload_dir()['basedir'];
 
@@ -138,7 +154,6 @@ class InstagramArchiveImporter {
 		$this->locations_csv = $csv_path ? $csv_path : $upload_dir . '/locations.csv';
 
 		$tag_tax = $opts['tag_taxonomy'];
-		$loc_tax = $opts['location_taxonomy'];
 
 		$this->ig_tag_taxonomy      = array(
 			'name'     => $tag_tax ? $tag_tax : 'ig_tag',
@@ -146,7 +161,7 @@ class InstagramArchiveImporter {
 			'plural'   => 'photo tags',
 		);
 		$this->ig_location_taxonomy = array(
-			'name'     => $loc_tax ? $loc_tax : 'ig_location',
+			'name'     => (string) apply_filters( 'b35_ig_location_taxonomy', 'ig_location' ),
 			'singular' => 'location',
 			'plural'   => 'locations',
 		);
@@ -158,52 +173,6 @@ class InstagramArchiveImporter {
 	public function init() {
 		$this->settings();
 		$this->ensure_taxonomy_exists( $this->ig_tag_taxonomy );
-		$this->ensure_taxonomy_exists( $this->ig_location_taxonomy );
-		add_filter( 'term_link', array( $this, 'set_location_term_link' ), 25, 3 );
-		$taxonomy = $this->ig_location_taxonomy['name'];
-		add_filter( "term_links-{$taxonomy}", array( $this, 'set_location_term_link_target' ), 25, 1 );
-
-		add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ) );
-	}
-
-	/**
-	 * Removes the default ig_location taxonomy meta box from the post editor.
-	 */
-	public function add_meta_box() {
-		remove_meta_box( 'tagsdiv-' . $this->ig_location_taxonomy['name'], 'post', 'side' );
-	}
-
-	/**
-	 * Adds target="_blank" and rel="nofollow" to ig_location term links.
-	 *
-	 * @param array $links Array of term link HTML strings.
-	 * @return array Modified array of term link HTML strings.
-	 */
-	public function set_location_term_link_target( $links ) {
-		return array_map(
-			function ( $link ) {
-				return str_replace( 'rel="tag"', 'target="_blank" rel="nofollow"', $link );
-			},
-			$links
-		);
-	}
-
-	/**
-	 * Replaces ig_location term links with Google Maps URLs.
-	 *
-	 * @param string   $termlink The term link URL.
-	 * @param \WP_Term $term     The term object.
-	 * @param string   $taxonomy The taxonomy slug.
-	 * @return string Modified or original term link URL.
-	 */
-	public function set_location_term_link( $termlink, $term, $taxonomy ) {
-		if ( $this->ig_location_taxonomy['name'] === $taxonomy ) {
-			$latlong = get_term_meta( $term->term_id, 'latlong', true );
-
-			return sprintf( 'https://maps.google.com/?q=%s', $latlong );
-		}
-
-		return $termlink;
 	}
 
 	/**
@@ -212,15 +181,26 @@ class InstagramArchiveImporter {
 	 * Trigger URL: wp_nonce_url( admin_url( '?action=b35-instagram-archive-importer-import' ), 'b35-instagram-archive-importer-import' )
 	 */
 	public function admin_init() {
-		if ( ! isset( $_GET['action'] ) || 'b35-instagram-archive-importer-import' !== sanitize_key( wp_unslash( $_GET['action'] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_GET['action'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		$action = sanitize_key( wp_unslash( $_GET['action'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( 'b35-instagram-archive-importer-import' !== $action && 'b35-instagram-archive-importer-test' !== $action ) {
 			return;
 		}
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		check_admin_referer( 'b35-instagram-archive-importer-import' );
-		$this->init_import();
-		add_action( 'admin_notices', array( $this, 'display_notice' ) );
+		if ( 'b35-instagram-archive-importer-import' === $action ) {
+			check_admin_referer( 'b35-instagram-archive-importer-import' );
+			$this->init_import();
+			add_action( 'admin_notices', array( $this, 'display_notice' ) );
+		} else {
+			check_admin_referer( 'b35-instagram-archive-importer-test' );
+			$this->run_test_import();
+			wp_safe_redirect( admin_url( 'tools.php?page=' . InstagramImporterAdminPage::MENU_SLUG . '&b35_test_done=1' ) );
+			exit;
+		}
 	}
 
 	/**
@@ -230,8 +210,12 @@ class InstagramArchiveImporter {
 		$this->settings();
 
 		$this->ensure_taxonomy_exists( $this->ig_tag_taxonomy );
-		$this->ensure_taxonomy_exists( $this->ig_location_taxonomy );
 		$json_data = $this->parse_json_feed();
+
+		if ( null === $json_data ) {
+			$this->add_error( __( 'Could not read or decode the JSON file.', 'b35-instagram-archive-importer' ) );
+			return;
+		}
 
 		if ( ! function_exists( 'WP_Filesystem' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -243,7 +227,7 @@ class InstagramArchiveImporter {
 			foreach ( explode( "\n", trim( $csv_content ) ) as $line ) {
 				$line = trim( $line );
 				if ( $line ) {
-					$this->location_data[] = str_getcsv( $line );
+					$this->location_data[] = str_getcsv( $line, ',', '"', '' );
 				}
 			}
 		}
@@ -308,16 +292,14 @@ class InstagramArchiveImporter {
 	/**
 	 * Reads and decodes the Instagram JSON feed file.
 	 *
-	 * @return array Parsed JSON data as an associative array.
+	 * @return array|null Parsed JSON data, or null on read/decode failure.
 	 */
-	private function parse_json_feed() {
+	private function parse_json_feed(): ?array {
 		$json_object = file_get_contents( $this->json_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-		$json_data   = json_decode( $json_object, true );
-		if ( null === $json_data ) {
-			exit( 'Error decoding the JSON file' );
+		if ( false === $json_object ) {
+			return null;
 		}
-
-		return $json_data;
+		return json_decode( $json_object, true );
 	}
 
 	/**
@@ -339,6 +321,25 @@ class InstagramArchiveImporter {
 	 * @param array $grampost Single Instagram post object from the archive.
 	 */
 	private function parse_instagram_post( $grampost ) {
+		$source_uri = $grampost['media'][0]['uri'] ?? '';
+		if ( $source_uri ) {
+			$existing = get_posts(
+				array(
+					'post_type'     => 'post',
+					'post_status'   => 'any',
+					'meta_key'      => '_ig_source_uri', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value'    => $source_uri,      // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+					'fields'        => 'ids',
+					'numberposts'   => 1,
+					'no_found_rows' => true,
+				)
+			);
+			if ( ! empty( $existing ) ) {
+				++$this->skipped;
+				return;
+			}
+		}
+
 		$post_content = '';
 		$title        = '';
 		$time         = time();
@@ -367,7 +368,8 @@ class InstagramArchiveImporter {
 					$post_content .= $this->get_image_html( $image_id );
 				}
 			} else {
-				$this->add_error( $image_id );
+				$source = trailingslashit( $this->export_uri ) . $grampic['uri'];
+				$this->add_error( $source . ': ' . $image_id->get_error_message() );
 			}
 		}
 		if ( array_key_exists( 'title', $grampost ) ) {
@@ -385,6 +387,10 @@ class InstagramArchiveImporter {
 				'post_content' => $post_content,
 			)
 		);
+
+		if ( $source_uri ) {
+			add_post_meta( $this->post_id, '_ig_source_uri', $source_uri );
+		}
 
 		$this->parse_and_add_tags( $title );
 		// Add location if available.
@@ -524,10 +530,22 @@ POST;
 	 * @return int|\WP_Error Attachment post ID, or WP_Error on failure.
 	 */
 	public function upload_image( $file, $time, $caption, $description ) {
+		if ( ! $this->sslverify ) {
+			$disable_ssl = static function ( $args ) {
+				$args['sslverify'] = false;
+				return $args;
+			};
+			add_filter( 'http_request_args', $disable_ssl );
+		}
+
 		$file_array = array(
 			'name'     => wp_basename( $file ),
 			'tmp_name' => download_url( $file ),
 		);
+
+		if ( ! $this->sslverify ) {
+			remove_filter( 'http_request_args', $disable_ssl );
+		}
 
 		// If error storing temporarily, return the error.
 		if ( is_wp_error( $file_array['tmp_name'] ) ) {
@@ -545,6 +563,7 @@ POST;
 			)
 		);
 		add_post_meta( $id, '_wp_attachment_image_alt', $caption );
+		add_post_meta( $id, '_source_url', $file );
 
 		// Clean up the temp file on sideload failure.
 		if ( is_wp_error( $id ) ) {
@@ -564,6 +583,17 @@ POST;
 			__( 'Instagram import complete.', 'b35-instagram-archive-importer' ),
 			array( 'type' => 'success' )
 		);
+
+		if ( $this->skipped > 0 ) {
+			wp_admin_notice(
+				sprintf(
+					// translators: %d: number of skipped posts.
+					_n( '%d post was already imported and skipped.', '%d posts were already imported and skipped.', $this->skipped, 'b35-instagram-archive-importer' ),
+					$this->skipped
+				),
+				array( 'type' => 'info' )
+			);
+		}
 
 		if ( ! empty( $this->errors ) ) {
 			$items   = implode( '', array_map( fn( $e ) => '<li>' . esc_html( $e ) . '</li>', $this->errors ) );
@@ -596,7 +626,7 @@ POST;
 			array_filter(
 				$parts,
 				function ( $part ) {
-					return '#' === $part[0];
+					return str_starts_with( $part, '#' );
 				}
 			)
 		);
@@ -622,11 +652,13 @@ POST;
 			if ( count( $location ) > 1 ) {
 				if ( ! term_exists( $location[1], $this->ig_location_taxonomy['name'] ) ) {
 					$term_info = wp_insert_term( $location[1], $this->ig_location_taxonomy['name'] );
-					add_term_meta(
-						$term_info['term_taxonomy_id'],
-						'latlong',
-						$location[2] . ',' . $location[3]
-					);
+					if ( ! is_wp_error( $term_info ) ) {
+						add_term_meta(
+							$term_info['term_taxonomy_id'],
+							'latlong',
+							$location[2] . ',' . $location[3]
+						);
+					}
 				}
 				wp_set_object_terms( $this->post_id, $location[1], $this->ig_location_taxonomy['name'], false );
 			}
@@ -650,5 +682,93 @@ POST;
 	 */
 	public function add_meta( $name, $value ) {
 		add_post_meta( $this->post_id, $name, $value );
+	}
+
+	/**
+	 * Imports the first post from the JSON archive and stores a structured report as a transient.
+	 */
+	private function run_test_import(): void {
+		$this->errors  = array();
+		$this->skipped = 0;
+		$this->settings();
+		$this->ensure_taxonomy_exists( $this->ig_tag_taxonomy );
+
+		$json_data = $this->parse_json_feed();
+		if ( null === $json_data ) {
+			$this->store_test_report( array( 'fatal' => __( 'Could not read or decode the JSON file.', 'b35-instagram-archive-importer' ) ) );
+			return;
+		}
+
+		$first = reset( $json_data );
+		if ( ! $first ) {
+			$this->store_test_report( array( 'fatal' => __( 'No posts found in the JSON file.', 'b35-instagram-archive-importer' ) ) );
+			return;
+		}
+
+		if ( ! function_exists( 'WP_Filesystem' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		WP_Filesystem();
+		global $wp_filesystem;
+		$csv_content = $wp_filesystem->get_contents( $this->locations_csv );
+		if ( $csv_content ) {
+			foreach ( explode( "\n", trim( $csv_content ) ) as $line ) {
+				$line = trim( $line );
+				if ( $line ) {
+					$this->location_data[] = str_getcsv( $line, ',', '"', '' );
+				}
+			}
+		}
+
+		$this->parse_instagram_post( $first );
+
+		if ( $this->skipped > 0 ) {
+			$this->store_test_report( array( 'skipped' => true ) );
+			return;
+		}
+
+		$post      = get_post( $this->post_id );
+		$children  = get_children(
+			array(
+				'post_parent' => $this->post_id,
+				'post_type'   => 'attachment',
+				'numberposts' => -1,
+			)
+		);
+		$tags      = wp_get_object_terms( $this->post_id, $this->ig_tag_taxonomy['name'], array( 'fields' => 'names' ) );
+		$locations = wp_get_object_terms( $this->post_id, $this->ig_location_taxonomy['name'], array( 'fields' => 'names' ) );
+
+		$media = array();
+		foreach ( $children as $child ) {
+			$media[] = array(
+				'id'         => $child->ID,
+				'filename'   => basename( (string) get_attached_file( $child->ID ) ),
+				'type'       => strstr( $child->post_mime_type, '/', true ),
+				'source_url' => (string) get_post_meta( $child->ID, '_source_url', true ),
+			);
+		}
+
+		$this->store_test_report(
+			array(
+				'post_id'    => $this->post_id,
+				'post_title' => $post ? $post->post_title : '',
+				'post_date'  => $post ? $post->post_date : '',
+				'edit_url'   => get_edit_post_link( $this->post_id, 'raw' ),
+				'view_url'   => get_permalink( $this->post_id ),
+				'media'      => $media,
+				'tags'       => is_wp_error( $tags ) ? array() : $tags,
+				'location'   => ( ! is_wp_error( $locations ) && ! empty( $locations ) ) ? $locations[0] : null,
+				'errors'     => $this->errors,
+			)
+		);
+	}
+
+	/**
+	 * Stores the test import report as a short-lived transient keyed to the current user.
+	 *
+	 * @param array $report Report data to store.
+	 */
+	private function store_test_report( array $report ): void {
+		set_transient( 'b35_ig_test_import_' . get_current_user_id(), $report, 5 * MINUTE_IN_SECONDS );
 	}
 }
