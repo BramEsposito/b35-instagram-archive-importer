@@ -75,7 +75,7 @@ jobs:
         run: cp wp-tests-config.php.example wp-tests-config.php
 
       - name: Run PHPUnit
-        run: vendor/bin/phpunit --log-junit test-results/phpunit.xml
+        run: vendor/bin/phpunit --log-junit test-results/phpunit.xml --testdox
         env:
           WP_TESTS_DB_HOST: 127.0.0.1:3306
           WP_TESTS_DB_NAME: wordpress_test
