@@ -7,8 +7,8 @@
 >
 	<testsuites>
 		<testsuite name="b35 Instagram Archive Importer">
-			<file>tests/class-test-instagram-archive-importer.php</file>
-			<file>tests/class-test-instagram-importer-admin-page.php</file>
+			<file>tests/Test_Instagram_Archive_Importer.php</file>
+			<file>tests/Test_Instagram_Importer_Admin_Page.php</file>
 		</testsuite>
 	</testsuites>
 	<coverage>

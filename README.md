@@ -1,4 +1,5 @@
 # Instagram Archive Importer
+![Instagram Archive Importer](b35-instagram-archive-importer.png)
 
 A WordPress plugin that imports posts from a personal Instagram data export into WordPress. Each Instagram post becomes a WordPress post with its images or videos, hashtags as taxonomy terms, and location data linked to Google Maps.
 
