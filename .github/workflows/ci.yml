@@ -6,6 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   lint:
     name: Lint
@@ -67,6 +70,7 @@ jobs:
         with:
           php-version: '8.2'
           extensions: mysqli
+          coverage: pcov
 
       - name: Install Composer dependencies
         run: composer install --no-progress --prefer-dist
@@ -75,7 +79,7 @@ jobs:
         run: cp wp-tests-config.php.example wp-tests-config.php
 
       - name: Run PHPUnit
-        run: vendor/bin/phpunit --log-junit test-results/phpunit.xml --testdox
+        run: vendor/bin/phpunit --log-junit test-results/phpunit.xml --testdox --coverage-text --coverage-clover test-results/coverage.xml
         env:
           WP_TESTS_DB_HOST: 127.0.0.1:3306
           WP_TESTS_DB_NAME: wordpress_test
