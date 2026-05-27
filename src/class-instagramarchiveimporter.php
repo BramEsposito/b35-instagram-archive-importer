@@ -652,11 +652,13 @@ POST;
 			if ( count( $location ) > 1 ) {
 				if ( ! term_exists( $location[1], $this->ig_location_taxonomy['name'] ) ) {
 					$term_info = wp_insert_term( $location[1], $this->ig_location_taxonomy['name'] );
-					add_term_meta(
-						$term_info['term_taxonomy_id'],
-						'latlong',
-						$location[2] . ',' . $location[3]
-					);
+					if ( ! is_wp_error( $term_info ) ) {
+						add_term_meta(
+							$term_info['term_taxonomy_id'],
+							'latlong',
+							$location[2] . ',' . $location[3]
+						);
+					}
 				}
 				wp_set_object_terms( $this->post_id, $location[1], $this->ig_location_taxonomy['name'], false );
 			}
