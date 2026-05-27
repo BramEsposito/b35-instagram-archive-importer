@@ -428,6 +428,87 @@ class InstagramImporterAdminPage {
 	}
 
 	/**
+	 * Renders the test import report stored by the importer after a test run.
+	 *
+	 * @param array|false|null $report Report data from the transient, or null/false if absent.
+	 */
+	private function render_test_report( $report ): void {
+		if ( ! is_array( $report ) ) {
+			return;
+		}
+
+		if ( isset( $report['fatal'] ) ) {
+			?>
+			<div class="notice notice-error inline">
+				<p><strong><?php esc_html_e( 'Test import failed:', 'b35-instagram-archive-importer' ); ?></strong>
+				<?php echo esc_html( $report['fatal'] ); ?></p>
+			</div>
+			<?php
+			return;
+		}
+
+		$has_errors  = ! empty( $report['errors'] );
+		$notice_type = $has_errors ? 'notice-warning' : 'notice-success';
+		?>
+		<div class="notice <?php echo esc_attr( $notice_type ); ?> inline" style="padding-bottom:1em">
+			<h3 style="margin-top:.5em"><?php esc_html_e( 'Test Import Report', 'b35-instagram-archive-importer' ); ?></h3>
+			<table class="form-table" role="presentation" style="margin:0">
+				<tr>
+					<th><?php esc_html_e( 'Post', 'b35-instagram-archive-importer' ); ?></th>
+					<td>
+						<a href="<?php echo esc_url( $report['edit_url'] ); ?>"><?php echo esc_html( $report['post_title'] ); ?></a>
+						<span class="description">(ID: <?php echo (int) $report['post_id']; ?>)</span>
+						&mdash; <a href="<?php echo esc_url( $report['view_url'] ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'View', 'b35-instagram-archive-importer' ); ?></a>
+						&mdash; <?php echo esc_html( $report['post_date'] ); ?>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Media', 'b35-instagram-archive-importer' ); ?></th>
+					<td>
+						<?php if ( empty( $report['media'] ) ) : ?>
+							<em><?php esc_html_e( 'None', 'b35-instagram-archive-importer' ); ?></em>
+						<?php else : ?>
+							<?php foreach ( $report['media'] as $item ) : ?>
+								<?php echo esc_html( $item['filename'] ); ?>
+								<span class="description">(<?php echo esc_html( $item['type'] ); ?>, ID: <?php echo (int) $item['id']; ?>)</span><br>
+							<?php endforeach; ?>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Tags', 'b35-instagram-archive-importer' ); ?></th>
+					<td>
+						<?php if ( empty( $report['tags'] ) ) : ?>
+							<em><?php esc_html_e( 'None', 'b35-instagram-archive-importer' ); ?></em>
+						<?php else : ?>
+							<?php echo esc_html( implode( ', ', $report['tags'] ) ); ?>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Location', 'b35-instagram-archive-importer' ); ?></th>
+					<td>
+						<?php if ( $report['location'] ) : ?>
+							<?php echo esc_html( $report['location'] ); ?>
+						<?php else : ?>
+							<em><?php esc_html_e( 'None', 'b35-instagram-archive-importer' ); ?></em>
+						<?php endif; ?>
+					</td>
+				</tr>
+			</table>
+			<?php if ( $has_errors ) : ?>
+				<p><strong><?php esc_html_e( 'Errors:', 'b35-instagram-archive-importer' ); ?></strong></p>
+				<ul style="margin:.5em 0 0 1.5em;list-style:disc">
+					<?php foreach ( $report['errors'] as $error ) : ?>
+						<li><?php echo esc_html( $error ); ?></li>
+					<?php endforeach; ?>
+				</ul>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	/**
 	 * Renders the full admin page: settings form and import trigger.
 	 */
 	public function render_page(): void {
@@ -442,6 +523,17 @@ class InstagramImporterAdminPage {
 			admin_url( '?action=b35-instagram-archive-importer-import' ),
 			'b35-instagram-archive-importer-import'
 		);
+		$test_url   = wp_nonce_url(
+			admin_url( '?action=b35-instagram-archive-importer-test' ),
+			'b35-instagram-archive-importer-test'
+		);
+
+		$test_report = null;
+		if ( isset( $_GET['b35_test_done'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$transient_key = 'b35_ig_test_import_' . get_current_user_id();
+			$test_report   = get_transient( $transient_key );
+			delete_transient( $transient_key );
+		}
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Instagram Archive Importer', 'b35-instagram-archive-importer' ); ?></h1>
@@ -453,6 +545,22 @@ class InstagramImporterAdminPage {
 				submit_button( __( 'Save Settings', 'b35-instagram-archive-importer' ) );
 				?>
 			</form>
+
+			<hr>
+
+			<h2><?php esc_html_e( 'Test Import', 'b35-instagram-archive-importer' ); ?></h2>
+
+			<?php $this->render_test_report( $test_report ); ?>
+
+			<?php if ( $json_ready ) : ?>
+				<p><?php esc_html_e( 'Imports the first post from the JSON file so you can verify your settings before running the full import. A real post will be created.', 'b35-instagram-archive-importer' ); ?></p>
+				<a href="<?php echo esc_url( $test_url ); ?>" class="button">
+					<?php esc_html_e( 'Test Import', 'b35-instagram-archive-importer' ); ?>
+				</a>
+			<?php else : ?>
+				<p class="description"><?php esc_html_e( 'Select a JSON file above and save settings to enable the test import.', 'b35-instagram-archive-importer' ); ?></p>
+				<button class="button" disabled><?php esc_html_e( 'Test Import', 'b35-instagram-archive-importer' ); ?></button>
+			<?php endif; ?>
 
 			<hr>
 
