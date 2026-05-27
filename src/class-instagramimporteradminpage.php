@@ -165,6 +165,14 @@ class InstagramImporterAdminPage {
 			'b35_ig_import_settings'
 		);
 
+		add_settings_field(
+			'sslverify',
+			__( 'SSL verification', 'b35-instagram-archive-importer' ),
+			array( $this, 'render_sslverify_field' ),
+			self::MENU_SLUG,
+			'b35_ig_import_settings'
+		);
+
 		add_settings_section(
 			'b35_ig_files',
 			__( 'Archive Files', 'b35-instagram-archive-importer' ),
@@ -208,6 +216,7 @@ class InstagramImporterAdminPage {
 			'post_status'        => in_array( $post_status, $allowed_statuses, true ) ? $post_status : 'publish',
 			'tag_taxonomy'       => $tag_taxonomy ? $tag_taxonomy : 'ig_tag',
 			'location_taxonomy'  => $location_taxonomy ? $location_taxonomy : 'ig_location',
+			'sslverify'          => ! empty( $input['sslverify'] ),
 			'json_attachment_id' => absint( $input['json_attachment_id'] ?? 0 ),
 			'csv_attachment_id'  => absint( $input['csv_attachment_id'] ?? 0 ),
 		);
@@ -228,6 +237,7 @@ class InstagramImporterAdminPage {
 				'post_status'        => 'publish',
 				'tag_taxonomy'       => 'ig_tag',
 				'location_taxonomy'  => 'ig_location',
+				'sslverify'          => true,
 				'json_attachment_id' => 0,
 				'csv_attachment_id'  => 0,
 			)
@@ -361,6 +371,20 @@ class InstagramImporterAdminPage {
 			);
 		}
 		echo '</select>';
+	}
+
+	/**
+	 * Renders the SSL verification checkbox field.
+	 */
+	public function render_sslverify_field(): void {
+		$opts = $this->get_options();
+		printf(
+			'<label><input type="checkbox" name="%s[sslverify]" value="1"%s> %s</label>',
+			esc_attr( self::OPTION_KEY ),
+			checked( $opts['sslverify'], true, false ),
+			esc_html__( 'Verify SSL certificates', 'b35-instagram-archive-importer' )
+		);
+		echo '<p class="description">' . esc_html__( 'Uncheck when fetching media from a local or staging server with a self-signed certificate (e.g. ddev).', 'b35-instagram-archive-importer' ) . '</p>';
 	}
 
 	/**

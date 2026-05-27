@@ -82,6 +82,13 @@ class InstagramArchiveImporter {
 	private string $post_status;
 
 	/**
+	 * Whether to verify SSL certificates when downloading media files.
+	 *
+	 * @var bool
+	 */
+	private bool $sslverify;
+
+	/**
 	 * Parsed location data rows from locations.csv.
 	 *
 	 * @var array
@@ -119,6 +126,7 @@ class InstagramArchiveImporter {
 				'post_status'        => 'publish',
 				'tag_taxonomy'       => 'ig_tag',
 				'location_taxonomy'  => 'ig_location',
+				'sslverify'          => true,
 				'json_attachment_id' => 0,
 				'csv_attachment_id'  => 0,
 			)
@@ -128,6 +136,7 @@ class InstagramArchiveImporter {
 		$this->category_name = $opts['category'] ? $opts['category'] : 'photography';
 		$this->post_status   = $opts['post_status'];
 		$this->export_uri    = $opts['export_uri'];
+		$this->sslverify     = (bool) $opts['sslverify'];
 
 		$upload_dir = wp_upload_dir()['basedir'];
 
@@ -243,7 +252,7 @@ class InstagramArchiveImporter {
 			foreach ( explode( "\n", trim( $csv_content ) ) as $line ) {
 				$line = trim( $line );
 				if ( $line ) {
-					$this->location_data[] = str_getcsv( $line );
+					$this->location_data[] = str_getcsv( $line, ',', '"', '' );
 				}
 			}
 		}
@@ -524,10 +533,22 @@ POST;
 	 * @return int|\WP_Error Attachment post ID, or WP_Error on failure.
 	 */
 	public function upload_image( $file, $time, $caption, $description ) {
+		if ( ! $this->sslverify ) {
+			$disable_ssl = static function ( $args ) {
+				$args['sslverify'] = false;
+				return $args;
+			};
+			add_filter( 'http_request_args', $disable_ssl );
+		}
+
 		$file_array = array(
 			'name'     => wp_basename( $file ),
 			'tmp_name' => download_url( $file ),
 		);
+
+		if ( ! $this->sslverify ) {
+			remove_filter( 'http_request_args', $disable_ssl );
+		}
 
 		// If error storing temporarily, return the error.
 		if ( is_wp_error( $file_array['tmp_name'] ) ) {
@@ -596,7 +617,7 @@ POST;
 			array_filter(
 				$parts,
 				function ( $part ) {
-					return '#' === $part[0];
+					return str_starts_with( $part, '#' );
 				}
 			)
 		);
