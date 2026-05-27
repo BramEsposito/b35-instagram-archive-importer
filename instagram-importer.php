@@ -4,14 +4,12 @@
  *
  * Plugin Name: Instagram Archive importer
  * Plugin URI: https://bramesposito.com/projects/wordpress/instagram-archive-importer
- * Description: Import all your old instagram posts from your archive
+ * Description: Import all Instagram posts from an archive
  * Author: Bram Esposito
  * Author URI: https://bramesposito.com
  * Version: 1.00
  * Text Domain: b35-instagram-archive-importer
  * License: MIT License
- *
- * @package Instagram_Archive_Importer
  */
 
 require_once plugin_dir_path( __FILE__ ) . 'src/class-instagramimporteradminpage.php';

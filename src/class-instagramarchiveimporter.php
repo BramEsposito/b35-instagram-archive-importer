@@ -117,6 +117,8 @@ class InstagramArchiveImporter {
 				'category'           => 'photography',
 				'author'             => 0,
 				'post_status'        => 'publish',
+				'tag_taxonomy'       => 'ig_tag',
+				'location_taxonomy'  => 'ig_location',
 				'json_attachment_id' => 0,
 				'csv_attachment_id'  => 0,
 			)

@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<ruleset name="b35 Instagram Archive Importer">
+    <file>instagram-importer.php</file>
+    <file>src/</file>
+    <file>tests/</file>
+
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+
+    <rule ref="WordPress"/>
+
+    <!-- Test files don't require full doc-comment coverage. -->
+    <rule ref="Squiz.Commenting.FileComment.Missing">
+        <exclude-pattern>*/tests/*</exclude-pattern>
+    </rule>
+    <rule ref="Squiz.Commenting.FileComment.MissingPackageTag">
+        <exclude-pattern>*/tests/*</exclude-pattern>
+    </rule>
+    <rule ref="Squiz.Commenting.FunctionComment.Missing">
+        <exclude-pattern>*/tests/*</exclude-pattern>
+    </rule>
+    <rule ref="Squiz.Commenting.FunctionComment.WrongStyle">
+        <exclude-pattern>*/tests/*</exclude-pattern>
+    </rule>
+    <rule ref="Squiz.Commenting.VariableComment.Missing">
+        <exclude-pattern>*/tests/*</exclude-pattern>
+    </rule>
+</ruleset>

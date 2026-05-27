@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "lint:js": "eslint js/",
-    "lint:php": "vendor/bin/phpcs --standard=WordPress",
+    "lint:php": "vendor/bin/phpcs --standard=phpcs.xml.dist",
+    "test:php": "vendor/bin/phpunit",
     "prepare": "husky"
   },
   "lint-staged": {
     "*.js": "eslint",
-    "*.php": "vendor/bin/phpcs --standard=WordPress"
+    "*.php": "vendor/bin/phpcs --standard=phpcs.xml.dist"
   },
   "devDependencies": {
     "@wordpress/eslint-plugin": "^22.0.0",
