@@ -23,7 +23,6 @@ class Test_Instagram_Importer_Admin_Page extends WP_UnitTestCase {
 
 		$this->assertSame( 'publish', $result['post_status'] );
 		$this->assertSame( 'ig_tag', $result['tag_taxonomy'] );
-		$this->assertSame( 'ig_location', $result['location_taxonomy'] );
 		$this->assertSame( 0, $result['author'] );
 		$this->assertSame( 0, $result['json_attachment_id'] );
 		$this->assertSame( 0, $result['csv_attachment_id'] );

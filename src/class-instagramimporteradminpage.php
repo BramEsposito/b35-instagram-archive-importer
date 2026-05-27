@@ -158,14 +158,6 @@ class InstagramImporterAdminPage {
 		);
 
 		add_settings_field(
-			'location_taxonomy',
-			__( 'Location taxonomy', 'b35-instagram-archive-importer' ),
-			array( $this, 'render_location_taxonomy_field' ),
-			self::MENU_SLUG,
-			'b35_ig_import_settings'
-		);
-
-		add_settings_field(
 			'sslverify',
 			__( 'SSL verification', 'b35-instagram-archive-importer' ),
 			array( $this, 'render_sslverify_field' ),
@@ -204,10 +196,9 @@ class InstagramImporterAdminPage {
 	 * @return array Sanitized settings array.
 	 */
 	public function sanitize_settings( array $input ): array {
-		$allowed_statuses  = array( 'publish', 'draft' );
-		$post_status       = $input['post_status'] ?? 'publish';
-		$tag_taxonomy      = sanitize_key( $input['tag_taxonomy'] ?? 'ig_tag' );
-		$location_taxonomy = sanitize_key( $input['location_taxonomy'] ?? 'ig_location' );
+		$allowed_statuses = array( 'publish', 'draft' );
+		$post_status      = $input['post_status'] ?? 'publish';
+		$tag_taxonomy     = sanitize_key( $input['tag_taxonomy'] ?? 'ig_tag' );
 
 		return array(
 			'export_uri'         => esc_url_raw( $input['export_uri'] ?? '' ),
@@ -215,7 +206,6 @@ class InstagramImporterAdminPage {
 			'author'             => absint( $input['author'] ?? 0 ),
 			'post_status'        => in_array( $post_status, $allowed_statuses, true ) ? $post_status : 'publish',
 			'tag_taxonomy'       => $tag_taxonomy ? $tag_taxonomy : 'ig_tag',
-			'location_taxonomy'  => $location_taxonomy ? $location_taxonomy : 'ig_location',
 			'sslverify'          => ! empty( $input['sslverify'] ),
 			'json_attachment_id' => absint( $input['json_attachment_id'] ?? 0 ),
 			'csv_attachment_id'  => absint( $input['csv_attachment_id'] ?? 0 ),
@@ -236,7 +226,6 @@ class InstagramImporterAdminPage {
 				'author'             => 0,
 				'post_status'        => 'publish',
 				'tag_taxonomy'       => 'ig_tag',
-				'location_taxonomy'  => 'ig_location',
 				'sslverify'          => true,
 				'json_attachment_id' => 0,
 				'csv_attachment_id'  => 0,
@@ -333,15 +322,6 @@ class InstagramImporterAdminPage {
 		$opts = $this->get_options();
 		$this->render_taxonomy_select( self::OPTION_KEY . '[tag_taxonomy]', $opts['tag_taxonomy'] );
 		echo '<p class="description">' . esc_html__( 'Taxonomy used for hashtags extracted from captions. Defaults to ig_tag (created automatically).', 'b35-instagram-archive-importer' ) . '</p>';
-	}
-
-	/**
-	 * Renders the location taxonomy select field.
-	 */
-	public function render_location_taxonomy_field(): void {
-		$opts = $this->get_options();
-		$this->render_taxonomy_select( self::OPTION_KEY . '[location_taxonomy]', $opts['location_taxonomy'] );
-		echo '<p class="description">' . esc_html__( 'Taxonomy used for locations. Defaults to ig_location (created automatically).', 'b35-instagram-archive-importer' ) . '</p>';
 	}
 
 	/**

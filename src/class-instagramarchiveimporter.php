@@ -154,7 +154,6 @@ class InstagramArchiveImporter {
 		$this->locations_csv = $csv_path ? $csv_path : $upload_dir . '/locations.csv';
 
 		$tag_tax = $opts['tag_taxonomy'];
-		$loc_tax = $opts['location_taxonomy'];
 
 		$this->ig_tag_taxonomy      = array(
 			'name'     => $tag_tax ? $tag_tax : 'ig_tag',
@@ -162,7 +161,7 @@ class InstagramArchiveImporter {
 			'plural'   => 'photo tags',
 		);
 		$this->ig_location_taxonomy = array(
-			'name'     => $loc_tax ? $loc_tax : 'ig_location',
+			'name'     => (string) apply_filters( 'b35_ig_location_taxonomy', 'ig_location' ),
 			'singular' => 'location',
 			'plural'   => 'locations',
 		);
@@ -174,52 +173,6 @@ class InstagramArchiveImporter {
 	public function init() {
 		$this->settings();
 		$this->ensure_taxonomy_exists( $this->ig_tag_taxonomy );
-		$this->ensure_taxonomy_exists( $this->ig_location_taxonomy );
-		add_filter( 'term_link', array( $this, 'set_location_term_link' ), 25, 3 );
-		$taxonomy = $this->ig_location_taxonomy['name'];
-		add_filter( "term_links-{$taxonomy}", array( $this, 'set_location_term_link_target' ), 25, 1 );
-
-		add_action( 'add_meta_boxes', array( $this, 'add_meta_box' ) );
-	}
-
-	/**
-	 * Removes the default ig_location taxonomy meta box from the post editor.
-	 */
-	public function add_meta_box() {
-		remove_meta_box( 'tagsdiv-' . $this->ig_location_taxonomy['name'], 'post', 'side' );
-	}
-
-	/**
-	 * Adds target="_blank" and rel="nofollow" to ig_location term links.
-	 *
-	 * @param array $links Array of term link HTML strings.
-	 * @return array Modified array of term link HTML strings.
-	 */
-	public function set_location_term_link_target( $links ) {
-		return array_map(
-			function ( $link ) {
-				return str_replace( 'rel="tag"', 'target="_blank" rel="nofollow"', $link );
-			},
-			$links
-		);
-	}
-
-	/**
-	 * Replaces ig_location term links with Google Maps URLs.
-	 *
-	 * @param string   $termlink The term link URL.
-	 * @param \WP_Term $term     The term object.
-	 * @param string   $taxonomy The taxonomy slug.
-	 * @return string Modified or original term link URL.
-	 */
-	public function set_location_term_link( $termlink, $term, $taxonomy ) {
-		if ( $this->ig_location_taxonomy['name'] === $taxonomy ) {
-			$latlong = get_term_meta( $term->term_id, 'latlong', true );
-
-			return sprintf( 'https://maps.google.com/?q=%s', $latlong );
-		}
-
-		return $termlink;
 	}
 
 	/**
@@ -257,7 +210,6 @@ class InstagramArchiveImporter {
 		$this->settings();
 
 		$this->ensure_taxonomy_exists( $this->ig_tag_taxonomy );
-		$this->ensure_taxonomy_exists( $this->ig_location_taxonomy );
 		$json_data = $this->parse_json_feed();
 
 		if ( null === $json_data ) {
@@ -738,7 +690,6 @@ POST;
 		$this->skipped = 0;
 		$this->settings();
 		$this->ensure_taxonomy_exists( $this->ig_tag_taxonomy );
-		$this->ensure_taxonomy_exists( $this->ig_location_taxonomy );
 
 		$json_data = $this->parse_json_feed();
 		if ( null === $json_data ) {
