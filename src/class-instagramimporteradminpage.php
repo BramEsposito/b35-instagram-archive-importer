@@ -437,6 +437,15 @@ class InstagramImporterAdminPage {
 			return;
 		}
 
+		if ( isset( $report['skipped'] ) ) {
+			?>
+			<div class="notice notice-info inline">
+				<p><?php esc_html_e( 'This post has already been imported and was skipped.', 'b35-instagram-archive-importer' ); ?></p>
+			</div>
+			<?php
+			return;
+		}
+
 		if ( isset( $report['fatal'] ) ) {
 			?>
 			<div class="notice notice-error inline">
@@ -471,6 +480,9 @@ class InstagramImporterAdminPage {
 							<?php foreach ( $report['media'] as $item ) : ?>
 								<?php echo esc_html( $item['filename'] ); ?>
 								<span class="description">(<?php echo esc_html( $item['type'] ); ?>, ID: <?php echo (int) $item['id']; ?>)</span><br>
+								<?php if ( $item['source_url'] ) : ?>
+									<span class="description"><?php echo esc_html( $item['source_url'] ); ?></span><br>
+								<?php endif; ?>
 							<?php endforeach; ?>
 						<?php endif; ?>
 					</td>

@@ -103,6 +103,13 @@ class InstagramArchiveImporter {
 	private array $errors = array();
 
 	/**
+	 * Number of posts skipped because they were already imported.
+	 *
+	 * @var int
+	 */
+	private int $skipped = 0;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param string $plugin_root Absolute path to the plugin root directory.
@@ -362,6 +369,25 @@ class InstagramArchiveImporter {
 	 * @param array $grampost Single Instagram post object from the archive.
 	 */
 	private function parse_instagram_post( $grampost ) {
+		$source_uri = $grampost['media'][0]['uri'] ?? '';
+		if ( $source_uri ) {
+			$existing = get_posts(
+				array(
+					'post_type'     => 'post',
+					'post_status'   => 'any',
+					'meta_key'      => '_ig_source_uri', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+					'meta_value'    => $source_uri,      // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+					'fields'        => 'ids',
+					'numberposts'   => 1,
+					'no_found_rows' => true,
+				)
+			);
+			if ( ! empty( $existing ) ) {
+				++$this->skipped;
+				return;
+			}
+		}
+
 		$post_content = '';
 		$title        = '';
 		$time         = time();
@@ -390,7 +416,8 @@ class InstagramArchiveImporter {
 					$post_content .= $this->get_image_html( $image_id );
 				}
 			} else {
-				$this->add_error( $image_id );
+				$source = trailingslashit( $this->export_uri ) . $grampic['uri'];
+				$this->add_error( $source . ': ' . $image_id->get_error_message() );
 			}
 		}
 		if ( array_key_exists( 'title', $grampost ) ) {
@@ -408,6 +435,10 @@ class InstagramArchiveImporter {
 				'post_content' => $post_content,
 			)
 		);
+
+		if ( $source_uri ) {
+			add_post_meta( $this->post_id, '_ig_source_uri', $source_uri );
+		}
 
 		$this->parse_and_add_tags( $title );
 		// Add location if available.
@@ -580,6 +611,7 @@ POST;
 			)
 		);
 		add_post_meta( $id, '_wp_attachment_image_alt', $caption );
+		add_post_meta( $id, '_source_url', $file );
 
 		// Clean up the temp file on sideload failure.
 		if ( is_wp_error( $id ) ) {
@@ -599,6 +631,17 @@ POST;
 			__( 'Instagram import complete.', 'b35-instagram-archive-importer' ),
 			array( 'type' => 'success' )
 		);
+
+		if ( $this->skipped > 0 ) {
+			wp_admin_notice(
+				sprintf(
+					// translators: %d: number of skipped posts.
+					_n( '%d post was already imported and skipped.', '%d posts were already imported and skipped.', $this->skipped, 'b35-instagram-archive-importer' ),
+					$this->skipped
+				),
+				array( 'type' => 'info' )
+			);
+		}
 
 		if ( ! empty( $this->errors ) ) {
 			$items   = implode( '', array_map( fn( $e ) => '<li>' . esc_html( $e ) . '</li>', $this->errors ) );
@@ -691,7 +734,8 @@ POST;
 	 * Imports the first post from the JSON archive and stores a structured report as a transient.
 	 */
 	private function run_test_import(): void {
-		$this->errors = array();
+		$this->errors  = array();
+		$this->skipped = 0;
 		$this->settings();
 		$this->ensure_taxonomy_exists( $this->ig_tag_taxonomy );
 		$this->ensure_taxonomy_exists( $this->ig_location_taxonomy );
@@ -725,6 +769,11 @@ POST;
 
 		$this->parse_instagram_post( $first );
 
+		if ( $this->skipped > 0 ) {
+			$this->store_test_report( array( 'skipped' => true ) );
+			return;
+		}
+
 		$post      = get_post( $this->post_id );
 		$children  = get_children(
 			array(
@@ -739,9 +788,10 @@ POST;
 		$media = array();
 		foreach ( $children as $child ) {
 			$media[] = array(
-				'id'       => $child->ID,
-				'filename' => basename( (string) get_attached_file( $child->ID ) ),
-				'type'     => strstr( $child->post_mime_type, '/', true ),
+				'id'         => $child->ID,
+				'filename'   => basename( (string) get_attached_file( $child->ID ) ),
+				'type'       => strstr( $child->post_mime_type, '/', true ),
+				'source_url' => (string) get_post_meta( $child->ID, '_source_url', true ),
 			);
 		}
 
