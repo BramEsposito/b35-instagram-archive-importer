@@ -79,7 +79,7 @@ jobs:
         run: cp wp-tests-config.php.example wp-tests-config.php
 
       - name: Run PHPUnit
-        run: vendor/bin/phpunit --log-junit test-results/phpunit.xml --testdox --coverage-text --coverage-clover test-results/coverage.xml
+        run: vendor/bin/phpunit --log-junit test-results/phpunit.xml --testdox-text test-results/testdox.txt --coverage-text=test-results/coverage.txt --coverage-clover test-results/coverage.xml
         env:
           WP_TESTS_DB_HOST: 127.0.0.1:3306
           WP_TESTS_DB_NAME: wordpress_test
@@ -91,3 +91,25 @@ jobs:
         if: always()
         with:
           files: test-results/phpunit.xml
+
+      - name: Build PR comment
+        if: always() && github.event_name == 'pull_request'
+        run: |
+          {
+            echo "## Tests"
+            echo '```'
+            cat test-results/testdox.txt
+            echo '```'
+            echo ""
+            echo "## Coverage"
+            echo '```'
+            cat test-results/coverage.txt
+            echo '```'
+          } > test-results/comment.md
+
+      - name: Post comment to PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: always() && github.event_name == 'pull_request'
+        with:
+          header: phpunit-report
+          path: test-results/comment.md
